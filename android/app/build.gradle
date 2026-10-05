@@ -1,0 +1,56 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+android {
+    namespace 'com.hermes.deskbuddy'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.hermes.deskbuddy"
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName "0.1.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            debuggable true
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    kotlinOptions {
+        jvmTarget = '11'
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+}
+
+dependencies {
+    // OkHttp WebSocket — lightweight, well-tested
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    // Gson for JSON
+    implementation 'com.google.code.gson:gson:2.10.1'
+
+    // AndroidX core — minimal set only
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.security:security-crypto:1.1.0-alpha06'
+
+    // ConstraintLayout for the main screen
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+}

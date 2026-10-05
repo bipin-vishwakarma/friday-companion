@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en" manifest="">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Hermes Buddy</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --accent: #4FC3F7;
+    --accent-rgb: 79, 195, 247;
+    --bg: #050505;
+    --text: #ffffff;
+    --text-muted: rgba(255,255,255,0.4);
+    --glass-bg: rgba(20,20,20,0.6);
+    --glass-border: rgba(255,255,255,0.08);
+  }
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, sans-serif;
+    overflow: hidden; touch-action: manipulation;
+    user-select: none; -webkit-tap-highlight-color: transparent;
+  }
+  /* -- Layout -- */
+  #hud { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
+  #orb-container { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 1; pointer-events: auto; }
+  #orb-wrap { position: relative; cursor: pointer; transition: transform 0.2s ease-out; }
+  #orb-wrap:active { transform: scale(0.9); }
+  
+  canvas { display: block; position: absolute; top: 0; left: 0; transition: opacity 0.4s; }
+  #matrix-canvas { opacity: 0; }
+
+  /* -- HUD Top Left -- */
+  #services-dots { position: absolute; top: 24px; left: 24px; display: flex; flex-direction: column; gap: 6px; z-index: 20; pointer-events: auto;}
+  .dot-item { display: flex; align-items: center; gap: 8px; font-size: 10px; font-weight: 700; letter-spacing: 0.15em; color: var(--text-muted); opacity: 0.8; }
+  .dot-item .bulb { width: 6px; height: 6px; border-radius: 50%; background: #555; transition: all 0.3s; }
+  .dot-item.ok .bulb { background: #00E676; box-shadow: 0 0 8px rgba(0,230,118,0.5); }
+  .dot-item.warn .bulb { background: #FFD600; box-shadow: 0 0 8px rgba(255,214,0,0.5); animation: pulse 1.5s infinite; }
+  .dot-item.err .bulb { background: #FF1744; box-shadow: 0 0 8px rgba(255,23,68,0.5); }
+
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  /* -- HUD Top Right -- */
+  #status-display { position: absolute; top: 24px; right: 24px; pointer-events: none; z-index: 5; text-align: right; }
+  #state-label { font-size: 12px; font-weight: 800; letter-spacing: 0.2em; text-transform: uppercase; color: var(--text); margin-bottom: 2px; text-shadow: 0 2px 8px rgba(0,0,0,0.8); }
+  #status-text { font-size: 10px; letter-spacing: 0.05em; color: var(--text-muted); text-shadow: 0 2px 8px rgba(0,0,0,0.8); }
+
+  /* -- HUD Centered Status Overlay -- */
+  #center-status { position: absolute; top: 75%; left: 50%; transform: translate(-50%, -50%); padding: 8px 16px; background: rgba(0,0,0,0.6); border-radius: 20px; font-size: 12px; font-weight:600; text-transform: uppercase; letter-spacing:0.1em; color:var(--text); pointer-events:none; opacity:0; transition: opacity 0.3s;}
+  #center-status.show { opacity:1; }
+
+  /* -- Nav Pill -- */
+  #nav-pill { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); background: rgba(20,20,20,0.75); border: 1px solid var(--glass-border); border-radius: 30px; display: flex; gap: 4px; padding: 4px 6px; z-index: 20; }
+  .pill-btn { width: 40px; height: 40px; border-radius: 20px; border: none; background: transparent; color: var(--text-muted); display: flex; align-items: center; justify-content: center; transition: all 0.2s ease-out; }
+  .pill-btn:active { transform: scale(0.9); }
+  .pill-btn.active { background: rgba(255,255,255,0.1); color: var(--accent); }
+  .pill-btn svg { width: 22px; height: 22px; pointer-events: none; }
+
+  /* -- Sliding Panel -- */
+  .panel { position: absolute; bottom: 0; left: 0; width: 100%; max-height: 80%; background: #121212; border-top: 1px solid var(--glass-border); border-radius: 24px 24px 0 0; transform: translateY(110%); transition: transform 0.4s cubic-bezier(0.2,0.8,0.2,1); z-index: 100; display: flex; flex-direction: column; padding: 20px 20px 60px; overflow-y: auto; pointer-events: auto; }
+  .panel.open { transform: translateY(0); }
+  .panel-notch { width: 36px; height: 4px; background: rgba(255,255,255,0.2); border-radius: 2px; margin: -10px auto 20px; }
+  .panel h2 { font-size: 12px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: var(--accent); margin-bottom: 16px; }
+
+  .box { background: rgba(255,255,255,0.04); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+  .row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .row:last-child { margin-bottom: 0; }
+  .row label { font-size: 12px; color: var(--text-muted); }
+  .row span.val { font-size: 13px; font-weight: 500; }
+  
+  input[type=text] { background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 10px 12px; border-radius: 8px; font-size: 13px; width: 140px; }
+  input[type=text]:focus { outline: none; border-color: var(--accent); }
+  
+  .btn-group { display: flex; background: rgba(0,0,0,0.4); border-radius: 8px; padding: 4px; gap: 2px; }
+  .btn-group button { flex: 1; padding: 8px 10px; border: none; background: transparent; color: var(--text-muted); font-size: 11px; font-weight: 600; text-transform: uppercase; border-radius: 6px; }
+  .btn-group button.active { background: rgba(255,255,255,0.1); color: var(--accent); }
+
+  .btn-primary { width: 100%; padding: 14px; background: rgba(var(--accent-rgb), 0.15); border: 1px solid rgba(var(--accent-rgb), 0.3); border-radius: 12px; color: var(--accent); font-size: 12px; font-weight: 700; text-transform: uppercase; transition: all 0.2s; margin-top: 8px; }
+  .btn-primary:active { transform: scale(0.97); }
+
+  @media (orientation: landscape) {
+    #nav-pill { top: 50%; left: 24px; bottom: auto; right: auto; transform: translateY(-50%); flex-direction: column; }
+    .panel { max-height: 100%; max-width: 320px; right: 0; left: auto; transform: translateX(110%); border-radius: 24px 0 0 24px; border-top: none; }
+    .panel.open { transform: translateX(0); }
+  }
+</style>
+</head>
+<body>
+  <!-- Orb Area -->
+  <div id="orb-container"><div id="orb-wrap" onclick="handleOrbTap()"><canvas id="fluid-canvas"></canvas><canvas id="matrix-canvas"></canvas></div></div>
+
+  <div id="hud">
+    <!-- Top Left -->
+    <div id="services-dots">
+      <div class="dot-item" id="dot-omn"><div class="bulb"></div>OMN</div>
+      <div class="dot-item" id="dot-her"><div class="bulb"></div>HER</div>
+      <div class="dot-item" id="dot-tel"><div class="bulb"></div>TEL</div>
+    </div>
+    <!-- Top Right -->
+    <div id="status-display">
+      <div id="state-label">CONNECTING</div>
+      <div id="status-text">Network search</div>
+    </div>
+  </div>
+
+  <div id="center-status"></div>
+
+  <!-- Bottom Nav -->
+  <div id="nav-pill">
+    <button class="pill-btn active" onclick="openPanel('none', this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2v2M12 20v2M2 12h2M20 12h2 M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg></button>
+    <button class="pill-btn" onclick="openPanel('status', this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4 M7 8h2v5H7zM11 10h2v3h-2zM15 6h2v7h-2z"/></svg></button>
+    <button class="pill-btn" onclick="openPanel('settings', this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></button>
+    <button class="pill-btn" onclick="openPanel('power', this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18.36 6.64a9 9 0 1 1-12.73 0 M12 2v10"/></svg></button>
+  </div>
+
+  <!-- Panels -->
+  <div id="panel-status" class="panel"><div class="panel-notch"></div><h2>Systems</h2>
+    <div class="box"><div class="row"><label>CPU</label><span class="val" id="v-cpu">--%</span></div><div class="row"><label>RAM</label><span class="val" id="v-ram">--%</span></div><div class="row"><label>Disk</label><span class="val" id="v-dsk">--%</span></div></div>
+  </div>
+
+  <div id="panel-settings" class="panel"><div class="panel-notch"></div><h2>Settings</h2>
+    <div class="box">
+      <div class="row"><label>Gateway</label><input type="text" id="ip-ui" value="192.168.1.11:8765"></div>
+      <div class="row"><label>Token</label><input type="text" id="tk-ui"></div>
+    </div>
+    <div class="box">
+      <div class="row"><label>Persona</label><div class="btn-group"><button class="active" data-p="fluid" onclick="setPer('fluid')">Fluid</button><button data-p="matrix" onclick="setPer('matrix')">Net</button></div></div>
+      <div class="row"><label>Color</label><div class="btn-group" style="background:transparent;">
+          <button style="color:#4FC3F7; font-size:24px;" onclick="setCol('#4FC3F7')">•</button><button style="color:#CE93D8; font-size:24px;" onclick="setCol('#CE93D8')">•</button><button style="color:#69F0AE; font-size:24px;" onclick="setCol('#69F0AE')">•</button>
+      </div></div>
+    </div>
+    <button class="btn-primary" onclick="reqFs()">Fullscreen</button>
+    <button class="btn-primary" onclick="save()">Apply</button>
+  </div>
+
+  <div id="panel-power" class="panel" style="border-top-color:#ff1744;"><div class="panel-notch"></div><h2 style="color:#ff5252">Power</h2>
+    <button class="btn-primary" style="color:#00e676; border-color:rgba(0,230,118,0.3); background:rgba(0,230,118,0.1)" onclick="cmd('wake_pc')">Wake Host</button>
+    <button class="btn-primary" style="color:#ff1744; border-color:rgba(255,23,68,0.3); background:rgba(255,23,68,0.1)" onclick="cmd('shutdown_pc')">Halt Host</button>
+  </div>
+
+<script>
+  let CFG = JSON.parse(localStorage.getItem('h_v4')||'{"ip":"192.168.1.11:8765","tok":"_dxFFVlMs9yCjR-EPZck3H9ywJ59smWbRAz_vLjXtAY","col":"#4FC3F7","per":"fluid"}');
+  let au=null, ws=null, fDirty=true;
+  
+  function b(t) {
+    try {
+      if(!au) au=new (window.AudioContext||window.webkitAudioContext)();
+      if(au.state==='suspended') au.resume();
+      let o=au.createOscillator(), g=au.createGain(), n=au.currentTime; o.connect(g); g.connect(au.destination);
+      if(t==='tap'){ o.type='sine'; o.frequency.setValueAtTime(800,n); o.frequency.exponentialRampToValueAtTime(1200,n+.05); g.gain.setValueAtTime(0,n); g.gain.linearRampToValueAtTime(.1,n+.01); g.gain.exponentialRampToValueAtTime(.001,n+.1); o.start(n); o.stop(n+.1); }
+      if(t==='pop'){ o.type='triangle'; o.frequency.setValueAtTime(500,n); g.gain.linearRampToValueAtTime(.1,n+.01); g.gain.exponentialRampToValueAtTime(.001,n+.1); o.start(n); o.stop(n+.1); }
+      if(t==='err'){ o.type='sawtooth'; o.frequency.setValueAtTime(150,n); g.gain.linearRampToValueAtTime(.1,n+.01); g.gain.exponentialRampToValueAtTime(.001,n+.2); o.start(n); o.stop(n+.2); }
+    } catch(e){}
+  }
+
+  function reqFs() { b('tap'); try{ document.documentElement.requestFullscreen(); }catch(e){} }
+  
+  function openPanel(id, bEle) {
+    b('pop');
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('open'));
+    document.querySelectorAll('.pill-btn').forEach(pb=>pb.classList.remove('active'));
+    if(bEle) bEle.classList.add('active');
+    if(id!=='none') document.getElementById('panel-'+id).classList.add('open');
+  }
+
+  function setPer(p) { b('tap'); CFG.per=p; document.querySelectorAll('[data-p]').forEach(e=>e.classList.toggle('active',e.dataset.p===p)); document.getElementById('fluid-canvas').style.opacity=(p==='fluid'?1:0); document.getElementById('matrix-canvas').style.opacity=(p==='matrix'?1:0); }
+  function setCol(c) { 
+    b('tap'); CFG.col=c; 
+    document.documentElement.style.setProperty('--accent',c); 
+    let h=c.replace('#',''); 
+    document.documentElement.style.setProperty('--accent-rgb', `${parseInt(h.substr(0,2),16)},${parseInt(h.substr(2,2),16)},${parseInt(h.substr(4,2),16)}`);
+    fDirty=true;
+  }
+  function save() {
+    b('tap'); CFG.ip = document.getElementById('ip-ui').value; CFG.tok = document.getElementById('tk-ui').value;
+    localStorage.setItem('h_v4', JSON.stringify(CFG)); setTimeout(()=>location.reload(),200);
+  }
+  function cmd(c) {
+    b('tap'); if(ws&&ws.readyState===1) ws.send(JSON.stringify({type:'command',command:c,delay:3}));
+    if(c.includes('wake')||c.includes('shutdown')) openPanel('none', document.querySelector('.pill-btn'));
+  }
+
+  function lbl(s) {
+    document.getElementById('center-status').textContent = s;
+    document.getElementById('center-status').classList.add('show');
+    setTimeout(()=>document.getElementById('center-status').classList.remove('show'), 2000);
+  }
+
+  function handleOrbTap() {
+    b('tap'); reqFs();
+    document.getElementById('orb-wrap').style.transform='scale(0.85)';
+    setTimeout(()=>document.getElementById('orb-wrap').style.transform='scale(1)', 150);
+    if(ws&&ws.readyState===1) ws.send(JSON.stringify({type:'command',command:'listen'}));
+    lbl("Listening");
+  }
+
+  function uiStatus(t,m) { document.getElementById('state-label').textContent=t; document.getElementById('status-text').textContent=m; }
+  
+  function connect() {
+    uiStatus('CONNECTING','LAN Search');
+    if(ws) ws.close();
+    try {
+      ws = new WebSocket('ws://'+CFG.ip+'/ws?token='+CFG.tok);
+      ws.onopen = ()=>{ b('pop'); uiStatus('ONLINE','Ready'); ws.send(JSON.stringify({type:'device_info',device_name:'J2_HUD',app_version:'2.4'})); lbl("Connected"); };
+      ws.onmessage = (e)=>{
+        let d=JSON.parse(e.data);
+        if(d.type==='state_sync') {
+          let s=d.services||{}; 
+          let f=(i,v)=>{ let el=document.getElementById(i); if(el) el.className='dot-item '+(v==='healthy'?'ok':(v==='offline'||v==='unhealthy'?'err':'warn')); };
+          f('dot-omn',s.omniroute?.state); f('dot-her',s.hermes?.state); f('dot-tel',s.telegram?.state);
+          if(d.pc) { document.getElementById('v-cpu').textContent=Math.round(d.pc.cpu_percent||0)+'%'; document.getElementById('v-ram').textContent=Math.round(d.pc.ram_used_percent||0)+'%'; document.getElementById('v-dsk').textContent=Math.round(d.pc.disk_used_percent||0)+'%'; }
+        } else if(d.type==='state') uiStatus(d.state.toUpperCase(),d.message);
+      };
+      ws.onerror=ws.onclose=()=>{ uiStatus('OFFLINE','Retrying in 2s'); setTimeout(connect,2000); };
+    } catch(e) { setTimeout(connect,2000); }
+  }
+
+  document.addEventListener('click',(e)=>{ if(!e.target.closest('.panel') && !e.target.closest('#nav-pill') && !e.target.closest('#orb-wrap')) openPanel('none', document.querySelector('.pill-btn')); });
+
+  // WebGL Minimal
+  let gl, uRes, uTime, uCol, fSt=performance.now();
+  function initGl() {
+    gl = document.getElementById('fluid-canvas').getContext('webgl',{antialias:false}); if(!gl) return;
+    let cp = (s,t)=>{let sh=gl.createShader(t); gl.shaderSource(sh,s); gl.compileShader(sh); return sh;};
+    let prog = gl.createProgram(); gl.attachShader(prog, cp('attribute vec2 p; void main(){gl_Position=vec4(p,0.,1.);}', gl.VERTEX_SHADER));
+    gl.attachShader(prog, cp(`precision mediump float; uniform vec2 r; uniform float t; uniform vec3 c;
+      float hs(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.545);}
+      float no(vec2 p){vec2 i=floor(p),f=fract(p),u=f*f*(3.-2.*f); return mix(mix(hs(i),hs(i+vec2(1.,0.)),u.x),mix(hs(i+vec2(0.,1.)),hs(i+vec2(1.,1.)),u.x),u.y);}
+      float fbm(vec2 p){float v=0.,a=.6; for(int i=0;i<3;i++){v+=a*no(p); p*=2.; a*=.5;} return v;}
+      void main(){
+        vec2 uv=gl_FragCoord.xy/r; float tm=t*.2;
+        vec2 d=vec2(sin(tm)+.6*sin(tm*1.7),cos(tm*.8)+.6*cos(tm*1.3)); vec2 p=vec2(uv.x*1.8,uv.y)+d*.7;
+        vec2 q=vec2(fbm(p+d),fbm(p+vec2(3.2,1.5)-d)); float sh=clamp(1.-uv.y+(fbm(p+q)-.5)*.8*smoothstep(0.,.3,uv.y),0.,1.);
+        vec3 col=mix(mix(vec3(1.),mix(vec3(1.),c,.5),smoothstep(.28,.52,sh)),c,smoothstep(.58,.88,sh)); float eg=smoothstep(.5,.49,distance(uv,vec2(.5)));
+        gl_FragColor=vec4(col*eg,eg);
+    }`, gl.FRAGMENT_SHADER));
+    gl.linkProgram(prog); gl.useProgram(prog);
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer()); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]), gl.STATIC_DRAW);
+    let aP = gl.getAttribLocation(prog,'p'); gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP,2,gl.FLOAT,false,0,0);
+    uRes = gl.getUniformLocation(prog,'r'); uTime = gl.getUniformLocation(prog,'t'); uCol = gl.getUniformLocation(prog,'c'); uMouse = gl.getUniformLocation(prog,'m');
+  }
+
+  let mx=document.getElementById('matrix-canvas').getContext('2d'), p=0;
+  function rslt() {
+    let sz = Math.max(150, Math.min(window.innerWidth, window.innerHeight)*0.6);
+    document.getElementById('orb-wrap').style.width = document.getElementById('orb-wrap').style.height = sz+'px';
+    document.querySelectorAll('canvas').forEach(c=>{ c.width=c.height=sz*1.5; c.style.width=c.style.height=sz+'px'; });
+    if(gl){gl.viewport(0,0,gl.canvas.width,gl.canvas.height);fDirty=true;}
+    if(mx) mx.scale(gl.canvas.width/sz, gl.canvas.width/sz);
+  }
+
+  function draw(nd) {
+    if(CFG.per==='fluid' && gl) {
+      if(fDirty){ gl.uniform2f(uRes,gl.canvas.width,gl.canvas.height); let h=CFG.col.replace('#',''),n=parseInt(h,16); gl.uniform3f(uCol,((n>>16)&255)/255,((n>>8)&255)/255,(n&255)/255); fDirty=false; }
+      gl.uniform1f(uTime, (nd-fSt)/1000); gl.drawArrays(gl.TRIANGLES,0,6);
+    }
+    if(CFG.per==='matrix' && mx) {
+      let sz=parseFloat(mx.canvas.style.width)||300; mx.clearRect(0,0,sz,sz); mx.fillStyle=CFG.col; p+=0.1;
+      for(let y=-4;y<=4;y++)for(let x=-4;x<=4;x++){ let d=Math.hypot(x,y)/4; if(d>1)continue;
+        let r=(sz*0.6/9) * Math.exp(-d*d*3) * (1+Math.sin(d*10-p)*0.4); if(r>0.5){mx.beginPath(); mx.arc(sz/2+x*(sz*0.75/9),sz/2+y*(sz*0.75/9),r,0,6.28); mx.fill();} }
+    }
+    requestAnimationFrame(draw);
+  }
+
+  initGl(); rslt(); window.onresize=rslt;
+  document.getElementById('ip-ui').value=CFG.ip; document.getElementById('tk-ui').value=CFG.tok;
+  setPer(CFG.per); setCol(CFG.col);
+  connect(); requestAnimationFrame(draw);
+</script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+[
+    {
+        "merged": "com.hermes.deskbuddy.app-merged_res-22:/mipmap-hdpi_ic_launcher.png.flat",
+        "source": "com.hermes.deskbuddy.app-main-24:/mipmap-hdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.hermes.deskbuddy.app-merged_res-22:/mipmap-xhdpi_ic_launcher.png.flat",
+        "source": "com.hermes.deskbuddy.app-main-24:/mipmap-xhdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.hermes.deskbuddy.app-merged_res-22:/mipmap-mdpi_ic_launcher.png.flat",
+        "source": "com.hermes.deskbuddy.app-main-24:/mipmap-mdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.hermes.deskbuddy.app-merged_res-22:/layout_activity_main.xml.flat",
+        "source": "com.hermes.deskbuddy.app-main-24:/layout/activity_main.xml"
+    }
+]

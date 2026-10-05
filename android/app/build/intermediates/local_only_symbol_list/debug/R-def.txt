@@ -1,0 +1,10 @@
+R_DEF: Internal format may change without notice
+local
+id personaView
+id tvServices
+id tvState
+id tvStatus
+layout activity_main
+mipmap ic_launcher
+string app_name
+style Theme.HermesDeskBuddy

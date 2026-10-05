@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+logs/
+gateway/gateway_state.json
+gateway/desk_buddy_config.json
+scratches/
