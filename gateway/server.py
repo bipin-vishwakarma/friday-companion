@@ -290,6 +290,13 @@ async def websocket_endpoint(ws: WebSocket, token: str = Query("")):
             elif msg_type == "state_update":
                 client.current_state = msg.get("state", "unknown")
 
+            elif msg_type == "voice_input":
+                # Received raw recorded audio from J2
+                b64_audio = msg.get("audio_base64", "")
+                mime = msg.get("mime", "audio/webm")
+                if b64_audio:
+                    asyncio.create_task(_process_voice_pipeline(ws, b64_audio, mime))
+
             elif msg_type == "command":
                 # Handle commands from J2
                 cmd = msg.get("command", "")
@@ -312,6 +319,97 @@ async def websocket_endpoint(ws: WebSocket, token: str = Query("")):
         clients.pop(cid, None)
         logger.info("Client disconnected: id=%d name=%s", cid, client.device_name)
 
+
+import base64
+import tempfile
+import edge_tts
+
+# Global Whisper model cache
+_whisper_model = None
+
+def _get_whisper():
+    global _whisper_model
+    if _whisper_model is None:
+        try:
+            from faster_whisper import WhisperModel
+            # Load tiny or base model on CPU / GPU
+            _whisper_model = WhisperModel("tiny.en", device="cpu", compute_type="int8")
+        except Exception as e:
+            logger.error("Failed to load Faster-Whisper: %s", e)
+    return _whisper_model
+
+async def _process_voice_pipeline(ws: WebSocket, b64_audio: str, mime: str):
+    """Decode audio, transcribe with faster-whisper, execute via Friday/Hermes, and TTS back."""
+    try:
+        raw_bytes = base64.b64decode(b64_audio)
+        ext = ".webm" if "webm" in mime else ".mp4"
+        
+        # Save temp file
+        with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as f:
+            f.write(raw_bytes)
+            tmp_in = f.name
+
+        # 1. Transcribe (STT)
+        model = _get_whisper()
+        if not model:
+            await ws.send_text(json.dumps({"type": "speech", "text": "STT model unavailable"}))
+            return
+
+        segments, _ = model.transcribe(tmp_in, beam_size=1)
+        transcript = " ".join([s.text for s in segments]).strip()
+        try:
+            os.remove(tmp_in)
+        except Exception:
+            pass
+
+        logger.info("Transcribed voice from J2: '%s'", transcript)
+        if not transcript:
+            return
+
+        # 2. Fast Reflex Classifier
+        lower = transcript.lower()
+        reply_text = ""
+
+        if any(w in lower for w in ["play", "pause", "resume", "stop"]) and "spotify" in lower or lower in ["play", "pause"]:
+            await _spotify_control("spotify_play_pause")
+            reply_text = "Playback toggled."
+        elif "next" in lower or "skip" in lower:
+            await _spotify_control("spotify_next")
+            reply_text = "Skipping track."
+        elif "previous" in lower or "back" in lower:
+            await _spotify_control("spotify_prev")
+            reply_text = "Previous track."
+        elif "sleep" in lower and ("host" in lower or "pc" in lower or "computer" in lower):
+            await sleep_pc()
+            reply_text = "Putting PC to sleep."
+        else:
+            # General query / chat: fallback response or proxy through Hermes
+            reply_text = f"Heard: {transcript}"
+
+        # 3. Text to Speech (Edge-TTS)
+        voice = "en-US-ChristopherNeural"  # Sharp, crisp male voice
+        communicate = edge_tts.Communicate(reply_text, voice)
+        
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+            tmp_out = f.name
+            
+        await communicate.save(tmp_out)
+        with open(tmp_out, "rb") as f:
+            tts_b64 = base64.b64encode(f.read()).decode("utf-8")
+        try:
+            os.remove(tmp_out)
+        except Exception:
+            pass
+
+        # Send response audio back to J2
+        await ws.send_text(json.dumps({
+            "type": "speech",
+            "text": reply_text,
+            "audio_base64": tts_b64
+        }))
+
+    except Exception as e:
+        logger.exception("Error processing voice pipeline: %s", e)
 
 async def _handle_j2_command(ws: WebSocket, cmd: str, msg: dict):
     """Process commands sent from J2 over WebSocket."""

@@ -363,10 +363,51 @@ function openPower(){pwrOpen=true;document.getElementById('power-menu').classLis
 function closePower(){pwrOpen=false;document.getElementById('power-menu').classList.remove('open');}
 document.getElementById('orb-layer').addEventListener('click',()=>{if(pwrOpen)closePower();});
 
-// ── Mic ───────────────────────────────────────────────────────
+// ── Mic & Audio Recording ─────────────────────────────────────────
 let analyser=null,micBuf=null,voiceRaw=0,voiceSmooth=0;
+let mediaRecorder=null,audioChunks=[],isRecording=false;
+
 async function initMic(){
-  try{const s=await navigator.mediaDevices.getUserMedia({audio:true,video:false});const src=AU.createMediaStreamSource(s);analyser=AU.createAnalyser();analyser.fftSize=256;src.connect(analyser);micBuf=new Uint8Array(analyser.frequencyBinCount);}catch(e){console.warn('Mic:',e);}
+  try{
+    const s=await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+    const src=AU.createMediaStreamSource(s);
+    analyser=AU.createAnalyser();
+    analyser.fftSize=256;
+    src.connect(analyser);
+    micBuf=new Uint8Array(analyser.frequencyBinCount);
+
+    // Setup MediaRecorder for Friday voice input
+    const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
+    mediaRecorder = new MediaRecorder(s, { mimeType: mime });
+    mediaRecorder.ondataavailable = e => { if(e.data.size > 0) audioChunks.push(e.data); };
+    mediaRecorder.onstop = async () => {
+      showLabel('THINKING...');
+      const blob = new Blob(audioChunks, { type: mime });
+      audioChunks = [];
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result.split(',')[1];
+        if(ws && ws.readyState === 1){
+          ws.send(JSON.stringify({ type: 'voice_input', audio_base64: base64, mime: mime }));
+        }
+      };
+      reader.readAsDataURL(blob);
+    };
+  }catch(e){console.warn('Mic init error:',e);}
+}
+
+function startRecording(){
+  if(!mediaRecorder) return;
+  audioChunks = [];
+  mediaRecorder.start();
+  isRecording = true;
+  showLabel('LISTENING...');
+}
+
+function stopRecording(){
+  if(!mediaRecorder || mediaRecorder.state !== 'recording') return;
+  mediaRecorder.stop();
+  isRecording = false;
 }
 
 // ── WebSocket ─────────────────────────────────────────────────
@@ -389,7 +430,15 @@ function wsConnect(){
     if(d.type==='state_sync')handleSync(d);
     if(d.type==='spotify_state')handleSpotify(d);
     if(d.type==='widget')handleWidget(d);
-    if(d.type==='speech'){toast(d.text||'');showLabel(d.text||'SPEAKING...');}
+    if(d.type==='speech'){
+      showLabel(d.text||'SPEAKING...');
+      if(d.audio_base64){
+        try{
+          const a = new Audio('data:audio/mp3;base64,' + d.audio_base64);
+          a.play();
+        }catch(e){console.warn('Audio play error:',e);}
+      }
+    }
   };
   ws.onclose=()=>{
     clearInterval(pingTimer);beep('disc');
@@ -590,7 +639,18 @@ function handleWidget(d){
 }
 
 // ── Orb ───────────────────────────────────────────────────────
-function handleOrbTap(){beep('tap');if(!analyser)initMic();showLabel('LISTENING...');try{document.documentElement.requestFullscreen();}catch(_){}if(ws&&ws.readyState===1)ws.send(JSON.stringify({type:'command',command:'listen'}));}
+async function handleOrbTap(){
+  beep('tap');
+  try{ document.documentElement.requestFullscreen(); }catch(_){}
+  if(!mediaRecorder) await initMic();
+  if(!isRecording){
+    startRecording();
+    // Auto-stop after 5 seconds of speaking to avoid runaway records
+    setTimeout(()=>{ if(isRecording) stopRecording(); }, 5000);
+  } else {
+    stopRecording();
+  }
+}
 function showLabel(txt){const el=document.getElementById('listen-label');el.textContent=txt;el.style.opacity=1;clearTimeout(el._t);el._t=setTimeout(()=>el.style.opacity=0,3000);}
 
 // ── Power ─────────────────────────────────────────────────────
